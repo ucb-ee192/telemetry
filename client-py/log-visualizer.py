@@ -17,6 +17,17 @@ class BasePlot:
     raise NotImplementedError()
 
 
+class HiddenPlot(BasePlot):
+  def __init__(self) -> None:
+    pass
+
+  def add_cell(self, indep_val: float, data: str) -> None:
+    pass
+
+  def render(self, subplot: Any) -> None:
+    pass
+
+
 class LinePlot(BasePlot):
   def __init__(self) -> None:
     self.x_values: List[float] = []
@@ -92,6 +103,8 @@ if __name__ == '__main__':
   parser.add_argument('--merge', '-m', action='append', default=[],
                       help='column names to merge for each plot, comma-separated without spaces, '
                            'can be specified multiple times, eg "-m camera,line -m kp,kd"')
+  parser.add_argument('--hide', default='',
+                      help='column names to hide, comma-separated without spaces')
   parser.add_argument('--skip_data_rows', type=int, default=0,
                       help='data columns to skip')
   args = parser.parse_args()
@@ -99,6 +112,8 @@ if __name__ == '__main__':
   #
   # Parse the input CSV
   #
+  hide_cols = args.hide.split(',')
+
   first_x = 0.0
   last_x = 0.0
   with open(args.filename, newline='') as csvfile:
@@ -112,15 +127,17 @@ if __name__ == '__main__':
       data_row = next(reader)  # infer data type from first row
       plots: List[BasePlot] = []
       for col_name, data_cell in zip(names[1:], data_row[1:]):  # discard first col
-        if str_is_float(data_cell):
+        if col_name in hide_cols or col_name.split(' ')[0] in hide_cols:
+          print(f"hiding '{col_name}'")
+          plots.append(HiddenPlot())
+        elif str_is_float(data_cell):
           print(f"detected numeric / line plot for '{col_name}'")
-          plot: BasePlot = LinePlot()
+          plots.append(LinePlot())
         elif str_is_array(data_cell):
           print(f"detected array / waterfall plot for '{col_name}'")
-          plot = WaterfallPlot()
+          plots.append(WaterfallPlot())
         else:
           raise ValueError(f"Unable to infer data type for '{col_name}' from data contents '{data_cell}'")
-        plots.append(plot)
 
       data_row_idx = 0
       first_x = float(data_row[0])
@@ -160,7 +177,8 @@ if __name__ == '__main__':
     else:
       key = frozenset([col_name])  # non-merged, use name as key
 
-    merged_plots.setdefault(key, []).append((col_name, plot))
+    if col_name not in hide_cols and simple_col_name not in hide_cols:
+      merged_plots.setdefault(key, []).append((col_name, plot))
 
   #
   # Render graphs
